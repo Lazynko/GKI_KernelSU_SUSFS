@@ -962,6 +962,7 @@ jobs:
     permissions:
       contents: write
     needs:
+    - resolve-sources
     - build-android12-5-10
     - build-android13-5-10
     - build-android13-5-15
@@ -1301,6 +1302,23 @@ jobs:
         if s: open(s,"a").write(output)
         PYEOF
 
+    - name: Verify release body is populated
+      run: |
+        set -euo pipefail
+        # resolve-sources outputs silently expand to empty when the job
+        # lacks it in `needs` (r20 shipped with _n/a_ everywhere). Fail
+        # fast instead of publishing thin notes.
+        if grep -q '_n/a_' release_body.md; then
+          echo "ERROR: release_body.md contains unresolved _n/a_ entries:" >&2
+          grep '_n/a_' release_body.md >&2
+          exit 1
+        fi
+        if ! grep -qE '\[`[0-9a-f]{7}`\]' release_body.md; then
+          echo "ERROR: release_body.md has no commit links" >&2
+          exit 1
+        fi
+        echo "Release body OK ($(wc -l < release_body.md) lines)"
+
     - name: Upload release notes artifact
       uses: actions/upload-artifact@v7
       with:
@@ -1434,9 +1452,12 @@ jobs:
         fi
         echo "Uploading ${#files[@]} assets one at a time..."
 
-        # The release may already exist (partial upload from a retried run).
+        # The release may already exist (partial upload from a retried run,
+        # or a concurrent run that computed the same tag). Refresh its notes
+        # so a re-run heals stale bodies instead of leaving them behind.
         if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-          echo "Release $TAG_NAME already exists — uploading into it."
+          echo "Release $TAG_NAME already exists — refreshing notes and uploading into it."
+          gh release edit "$TAG_NAME" --notes-file release_body.md
         else
           create_args=(--title "$RELEASE_TITLE" --notes-file release_body.md)
           if [ "$IS_PRERELEASE" = "true" ]; then
