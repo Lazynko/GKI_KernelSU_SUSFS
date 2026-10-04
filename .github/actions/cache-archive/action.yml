@@ -62,12 +62,12 @@ runs:
           echo "Creating release: $TAG_NAME"
           GIT_COMMITTER_DATE="2015-01-01T12:00:00" git tag -a "$TAG_NAME" -m "General Cache Storage"
           git push origin "$TAG_NAME" --force || true
-          gh release create "$TAG_NAME" --title "General Cache" --notes "Automated storage for build assets" --repo "$TARGET_REPO" || true
+          gh release create "$TAG_NAME" --title "General Cache" --notes "Automated storage for build assets" --prerelease --repo "$TARGET_REPO" || true
         fi
 
         # Check if path exists
         if [ ! -d "${{ inputs.cache_path }}" ] && [ ! -f "${{ inputs.cache_path }}" ]; then
-          echo "⚠️ Target path not found. Skipping cache save."
+          echo "[!] Target path not found. Skipping cache save."
           exit 0
         fi
 
@@ -108,7 +108,7 @@ runs:
           echo "Split complete, $NEW_PARTS_COUNT parts created"
 
           # Remove old single-file asset if switching to split parts
-          ALL_ASSETS=$(curl -sL -A "Mozilla/5.0" -w "%{http_code}" "https://github.com/${TARGET_REPO}/releases/expanded_assets/$TAG_NAME" -o assets.html 2>/dev/null || echo "0")
+          ALL_ASSETS=$(curl -sL -A "Mozilla/5.0" --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 30 -w "%{http_code}" "https://github.com/${TARGET_REPO}/releases/expanded_assets/$TAG_NAME" -o assets.html 2>/dev/null || echo "0")
           if [ "$ALL_ASSETS" = "200" ]; then
             ALL_ASSETS=$(grep -oP "download/$TAG_NAME/\K[\"' ]+" assets.html 2>/dev/null || echo "")
             if echo "$ALL_ASSETS" | grep -xF "${FILENAME}" >/dev/null 2>&1; then
@@ -129,7 +129,7 @@ runs:
           rm -f assets.html
         else
           # Remove old split parts if new build fits in a single file
-          ALL_ASSETS=$(curl -sL -A "Mozilla/5.0" -w "%{http_code}" "https://github.com/${TARGET_REPO}/releases/expanded_assets/$TAG_NAME" -o assets.html 2>/dev/null || echo "0")
+          ALL_ASSETS=$(curl -sL -A "Mozilla/5.0" --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 30 -w "%{http_code}" "https://github.com/${TARGET_REPO}/releases/expanded_assets/$TAG_NAME" -o assets.html 2>/dev/null || echo "0")
           if [ "$ALL_ASSETS" = "200" ]; then
             OLD_PARTS=$(grep -F "${FILENAME}.part" assets.html 2>/dev/null || echo "")
             if [ -n "$OLD_PARTS" ]; then
